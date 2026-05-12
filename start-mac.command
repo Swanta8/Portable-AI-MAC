@@ -110,15 +110,23 @@ if [ -f "$USB_DIR/models/installed-models.txt" ]; then
     echo ""
 fi
 
-# Start Ollama in background
-if [ -f "$MAC_OLLAMA_DIR/Ollama.app/Contents/MacOS/Ollama" ]; then
-    "$MAC_OLLAMA_DIR/Ollama.app/Contents/MacOS/Ollama" serve > /dev/null 2>&1 &
-elif [ -f "$MAC_OLLAMA_DIR/ollama" ]; then
-    "$MAC_OLLAMA_DIR/ollama" serve > /dev/null 2>&1 &
-else
-    echo "Error: Could not find the Ollama binary on the USB drive!"
+# Start Ollama in background.
+# IMPORTANT: use the CLI at Contents/Resources/ollama, NOT Contents/MacOS/Ollama
+# (the latter is the menubar GUI binary and rejects `serve`).
+OLLAMA_BIN=""
+if [ -x "$MAC_OLLAMA_DIR/Ollama.app/Contents/Resources/ollama" ]; then
+    OLLAMA_BIN="$MAC_OLLAMA_DIR/Ollama.app/Contents/Resources/ollama"
+elif [ -x "$MAC_OLLAMA_DIR/ollama" ]; then
+    OLLAMA_BIN="$MAC_OLLAMA_DIR/ollama"
 fi
-OLLAMA_PID=$!
+
+OLLAMA_PID=""
+if [ -n "$OLLAMA_BIN" ]; then
+    OLLAMA_HOST="127.0.0.1:11434" "$OLLAMA_BIN" serve > /dev/null 2>&1 &
+    OLLAMA_PID=$!
+else
+    echo "Error: Could not find the Ollama CLI binary on the USB drive!"
+fi
 
 sleep 3
 
