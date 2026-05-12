@@ -40,31 +40,18 @@ if [ ! -d "$MAC_OLLAMA_DIR/Ollama.app" ] && [ ! -f "$MAC_OLLAMA_DIR/ollama" ]; t
 fi
 
 # -----------------------------------------------------------------
-# STEP 2: Download AnythingLLM (first time only, fully portable!)
+# STEP 2: Download AnythingLLM DMG (kept as-is for portable launch on exFAT)
 # -----------------------------------------------------------------
-if [ ! -d "$USB_DIR/anythingllm_mac/AnythingLLM.app" ]; then
+if [ ! -f "$USB_DIR/anythingllm_mac/AnythingLLM_Installer.dmg" ]; then
     echo "First time setup: Downloading AnythingLLM directly to USB..."
     echo "NO installation on the Mac! Everything stays on the drive."
     mkdir -p "$USB_DIR/anythingllm_mac"
-    
-    # Download the DMG
+
+    # Download the DMG — we launch directly from the mounted DMG each run,
+    # because macOS 26+ refuses to validate code signatures on exFAT volumes.
     curl -L --progress-bar "https://cdn.anythingllm.com/latest/AnythingLLMDesktop-Silicon.dmg" -o "$USB_DIR/anythingllm_mac/AnythingLLM_Installer.dmg"
-    
-    echo "Extracting AnythingLLM to USB (please wait)..."
-    # Mount the DMG silently and extract
-    MOUNT_DIR=$(hdiutil attach -nobrowse "$USB_DIR/anythingllm_mac/AnythingLLM_Installer.dmg" | grep -o '/Volumes/.*')
-    
-    # Copy the app to the USB
-    cp -R "$MOUNT_DIR/AnythingLLM.app" "$USB_DIR/anythingllm_mac/"
-    
-    # Clean up
-    hdiutil detach "$MOUNT_DIR"
-    rm "$USB_DIR/anythingllm_mac/AnythingLLM_Installer.dmg"
-    
-    # Remove Apple quarantine so it runs from USB without being blocked
-    xattr -rc "$USB_DIR/anythingllm_mac/AnythingLLM.app"
-    
-    echo "AnythingLLM extracted and ready!"
+
+    echo "AnythingLLM downloaded and ready!"
 fi
 
 # -----------------------------------------------------------------
@@ -154,9 +141,30 @@ echo "Starting AI Interface from USB..."
 [ -d "$STORAGE_DIR/Code Cache" ] && rm -rf "$STORAGE_DIR/Code Cache"
 [ -d "$STORAGE_DIR/GPUCache" ] && rm -rf "$STORAGE_DIR/GPUCache"
 
-# Launch AnythingLLM from USB
-echo "Opening AnythingLLM..."
-open -a "$USB_DIR/anythingllm_mac/AnythingLLM.app" --args --user-data-dir="$STORAGE_DIR"
+# Launch AnythingLLM by mounting the DMG and opening the app from the mount.
+# (Apps signed for macOS 26+ won't validate from exFAT — the DMG is internally
+# APFS so signature & xattrs survive.)
+DMG_PATH="$USB_DIR/anythingllm_mac/AnythingLLM_Installer.dmg"
+APP_PATH_USB="$USB_DIR/anythingllm_mac/AnythingLLM.app"
+ANYTHINGLLM_MOUNT=""
+
+if [ -f "$DMG_PATH" ]; then
+    echo "Mounting AnythingLLM (no install — runs from DMG)..."
+    ANYTHINGLLM_MOUNT=$(hdiutil attach -nobrowse "$DMG_PATH" | awk -F'\t' '$3 ~ /^\/Volumes\// {print $3; exit}')
+    if [ -n "$ANYTHINGLLM_MOUNT" ] && [ -d "$ANYTHINGLLM_MOUNT/AnythingLLM.app" ]; then
+        echo "Opening AnythingLLM..."
+        open -a "$ANYTHINGLLM_MOUNT/AnythingLLM.app" --args --user-data-dir="$STORAGE_DIR"
+    else
+        echo "ERROR: Could not mount DMG or find AnythingLLM.app inside it!"
+        ANYTHINGLLM_MOUNT=""
+    fi
+elif [ -d "$APP_PATH_USB" ]; then
+    # Legacy fallback for older installs without DMG (may fail on macOS 26+)
+    echo "Opening AnythingLLM (legacy direct launch)..."
+    open -a "$APP_PATH_USB" --args --user-data-dir="$STORAGE_DIR"
+else
+    echo "ERROR: Neither AnythingLLM DMG nor app found on USB!"
+fi
 
 echo ""
 echo "Keep this terminal open while you chat!"
@@ -167,4 +175,8 @@ echo ""
 read -p "Hit [ENTER] to turn off the Engine..."
 kill $OLLAMA_PID 2>/dev/null
 killall AnythingLLM 2>/dev/null
+sleep 1
+if [ -n "$ANYTHINGLLM_MOUNT" ]; then
+    hdiutil detach "$ANYTHINGLLM_MOUNT" >/dev/null 2>&1 || hdiutil detach "$ANYTHINGLLM_MOUNT" -force >/dev/null 2>&1 || true
+fi
 echo "AI shut down. You may safely eject the USB."

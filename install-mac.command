@@ -580,28 +580,18 @@ ANYTHINGLLM_DMG_URL="https://cdn.anythingllm.com/latest/AnythingLLMDesktop-Silic
 ANYTHINGLLM_DMG="$MAC_ANYTHINGLLM_DIR/AnythingLLM_Installer.dmg"
 ANYTHINGLLM_APP="$MAC_ANYTHINGLLM_DIR/AnythingLLM.app"
 
-if [ -d "$ANYTHINGLLM_APP" ]; then
-    printf "%s      AnythingLLM.app already present. Skipping...%s\n" "$GREEN" "$NC"
+if [ -f "$ANYTHINGLLM_DMG" ]; then
+    printf "%s      AnythingLLM DMG already present. Skipping...%s\n" "$GREEN" "$NC"
+elif [ -d "$ANYTHINGLLM_APP" ]; then
+    printf "%s      Legacy AnythingLLM.app present (no DMG). Keeping it for now.%s\n" "$YELLOW" "$NC"
+    printf "%s      Tip: delete it and re-run install to fetch the DMG (more reliable on macOS 26+).%s\n" "$DGRAY" "$NC"
 else
     printf "%s      Downloading AnythingLLM DMG...%s\n" "$MAGENTA" "$NC"
     download_file "$ANYTHINGLLM_DMG_URL" "$ANYTHINGLLM_DMG" || true
 
     if [ -f "$ANYTHINGLLM_DMG" ]; then
-        printf "%s      Mounting DMG and copying app...%s\n" "$DGRAY" "$NC"
-        MOUNT_DIR=$(hdiutil attach -nobrowse "$ANYTHINGLLM_DMG" | grep -o '/Volumes/[^[:space:]]*' | tail -1)
-
-        if [ -n "$MOUNT_DIR" ] && [ -d "$MOUNT_DIR/AnythingLLM.app" ]; then
-            cp -R "$MOUNT_DIR/AnythingLLM.app" "$MAC_ANYTHINGLLM_DIR/"
-            hdiutil detach "$MOUNT_DIR" >/dev/null 2>&1 || true
-            rm -f "$ANYTHINGLLM_DMG"
-            # Remove Apple quarantine so it runs from external drive without being blocked
-            xattr -rc "$ANYTHINGLLM_APP" 2>/dev/null || true
-            printf "%s      AnythingLLM extracted to %s%s\n" "$GREEN" "$ANYTHINGLLM_APP" "$NC"
-        else
-            printf "%s      ERROR: Could not find AnythingLLM.app inside the mounted DMG!%s\n" "$RED" "$NC"
-            [ -n "$MOUNT_DIR" ] && hdiutil detach "$MOUNT_DIR" >/dev/null 2>&1 || true
-            add_error "AnythingLLM"
-        fi
+        printf "%s      AnythingLLM DMG saved to %s%s\n" "$GREEN" "$ANYTHINGLLM_DMG" "$NC"
+        printf "%s      (DMG kept on USB — start-mac.command mounts it each run for portable launch)%s\n" "$DGRAY" "$NC"
     else
         printf "%s      ERROR: AnythingLLM download failed!%s\n" "$RED" "$NC"
         add_error "AnythingLLM"
